@@ -17,12 +17,6 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:codexContext.newProject",
-    "onCommand:codexContext.syncWorkspace",
-    "onCommand:codexContext.doctorWorkspace",
-    "onCommand:codexContext.upgradeAgents",
-    "onCommand:codexContext.setupGlobal",
-    "onCommand:codexContext.doctorGlobal"
   ],
   "contributes": {
     "commands": [
