@@ -8,7 +8,8 @@
     "codex-context-init": "./bin/codex-context-init.js"
   },
   "scripts": {
-    "check": "node --check bin/codex-context-init.js && node --check src/core.js && node --check src/extension.js"
+    "check": "node --check bin/codex-context-init.js && node --check src/core.js && node --check src/extension.js",
+    "test": "node --test"
   },
   "engines": {
     "vscode": "^1.80.0"

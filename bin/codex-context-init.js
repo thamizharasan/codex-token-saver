@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
+import path from "node:path";
 import {
   getWatchDirs,
   isIgnoredWorkspacePath,
-  runDoctor,
   runContextClean,
   runContextDoctor,
   runContextIndex,
+  runDoctor,
   runGlobalDoctor,
   runGlobalSetup,
   runNew,
@@ -15,11 +17,17 @@ import {
   runSync,
   runUpgrade
 } from "../src/core.js";
-import fs from "node:fs";
-import path from "node:path";
+import { createLogger } from "../src/core/logger.js";
+
+const rawArgs = process.argv.slice(2);
+const verbose = rawArgs.includes("--verbose");
+const args = rawArgs.filter((arg) => arg !== "--verbose");
+const [command, subcommand, ...rest] = args;
+const options = { force: rest.includes("--force") };
+const logger = createLogger({ verbose });
 
 function usage(code = 0) {
-  console.log(`Usage:
+  logger.info(`Usage:
   codex-context-init new <project-name> [--force]
   codex-context-init global [doctor]
   codex-context-init project <upgrade|doctor>
@@ -31,23 +39,17 @@ function usage(code = 0) {
   process.exit(code);
 }
 
-const [command, subcommand, ...rest] = process.argv.slice(2);
-const options = { force: rest.includes("--force") };
-
 function printIndexResult(result) {
-  console.log(`Indexed ${result.filesIndexed} file(s)`);
-  console.log(`Wrote ${result.written} changed context artifact(s)`);
-  console.log(`Skipped ${result.skippedLarge} large file(s)`);
-  console.log(`Ignored ${result.ignored} file(s) or directories`);
+  logger.info(`Indexed ${result.filesIndexed} file(s)`);
+  logger.info(`Wrote ${result.written} changed context artifact(s)`);
+  logger.info(`Skipped ${result.skippedLarge} large file(s)`);
+  logger.info(`Ignored ${result.ignored} file(s) or directories`);
 }
 
 function runWatch() {
   let timer;
   const root = process.cwd();
-  const index = () => {
-    const result = runContextIndex();
-    printIndexResult(result);
-  };
+  const index = () => printIndexResult(runContextIndex());
   index();
   for (const dir of getWatchDirs()) {
     fs.watch(dir, (_event, filename) => {
@@ -56,36 +58,36 @@ function runWatch() {
       timer = setTimeout(index, 1000);
     });
   }
-  console.log("Watching for changes. Press Ctrl+C to stop.");
+  logger.info("Watching for changes. Press Ctrl+C to stop.");
 }
 
 try {
   switch (command) {
     case "new": {
       const result = runNew(subcommand, options);
-      console.log(`Created ${result.root}`);
+      logger.info(`Created ${result.root}`);
       break;
     }
     case "global": {
       if (subcommand === "doctor") {
         const result = runGlobalDoctor();
-        for (const item of result.results) console.log(item.line);
+        for (const item of result.results) logger.info(item.line);
         process.exit(result.ok ? 0 : 1);
       }
       if (subcommand) usage(1);
       const result = runGlobalSetup();
-      console.log(`${result.action === "created" ? "Created" : "Updated"} ~/.codex/AGENTS.md`);
+      logger.info(`${result.action === "created" ? "Created" : "Updated"} ~/.codex/AGENTS.md`);
       break;
     }
     case "project": {
       if (subcommand === "upgrade") {
         const result = runProjectUpgrade();
-        console.log(`${result.action === "created" ? "Created" : "Updated"} .codex/AGENTS.md`);
+        logger.info(`${result.action === "created" ? "Created" : "Updated"} .codex/AGENTS.md`);
         break;
       }
       if (subcommand === "doctor") {
         const result = runProjectDoctor();
-        for (const item of result.results) console.log(item.line);
+        for (const item of result.results) logger.info(item.line);
         process.exit(result.ok ? 0 : 1);
       }
       usage(1);
@@ -96,19 +98,18 @@ try {
         runWatch();
         break;
       }
-      const result = runContextIndex();
-      printIndexResult(result);
+      printIndexResult(runContextIndex());
       break;
     }
     case "context": {
       if (subcommand === "doctor") {
         const result = runContextDoctor();
-        for (const item of result.results) console.log(item.line);
+        for (const item of result.results) logger.info(item.line);
         process.exit(result.ok ? 0 : 1);
       }
       if (subcommand === "clean") {
         const result = runContextClean();
-        console.log(`${result.removed ? "Removed" : "No context directory at"} .codex/context`);
+        logger.info(`${result.removed ? "Removed" : "No context directory at"} .codex/context`);
         break;
       }
       usage(1);
@@ -116,24 +117,24 @@ try {
     }
     case "sync": {
       const result = runSync();
-      console.log(`Created ${result.created} missing file(s)`);
+      logger.info(`Created ${result.created} missing file(s)`);
       break;
     }
     case "doctor": {
       const result = runDoctor();
-      for (const item of result.results) console.log(item.line);
+      for (const item of result.results) logger.info(item.line);
       process.exit(result.ok ? 0 : 1);
       break;
     }
     case "upgrade": {
       const result = runUpgrade();
-      console.log(`${result.action === "created" ? "Created" : "Updated"} .codex/AGENTS.md`);
+      logger.info(`${result.action === "created" ? "Created" : "Updated"} .codex/AGENTS.md`);
       break;
     }
     default:
       usage(command ? 1 : 0);
   }
 } catch (error) {
-  console.error(error.message);
+  logger.error(error);
   process.exit(1);
 }

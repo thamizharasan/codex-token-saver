@@ -12,6 +12,7 @@ import {
   runProjectUpgrade,
   runSync
 } from "./core.js";
+import { createLogger } from "./core/logger.js";
 
 function workspaceRoot() {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -27,72 +28,82 @@ function maxFileSizeKb() {
   return vscode.workspace.getConfiguration("codexContext").get("maxFileSizeKb", 300);
 }
 
-function writeIndexReport(output, result) {
+function writeIndexReport(output, logger, result) {
   output.clear();
-  output.appendLine("indexing started");
-  output.appendLine(`${result.filesIndexed} files indexed`);
-  output.appendLine(`${result.written} artifacts written`);
-  output.appendLine(`${result.skippedLarge} skipped large files count`);
-  output.appendLine(`${result.ignored} ignored files count`);
+  logger.info("indexing started");
+  logger.info(`${result.filesIndexed} files indexed`);
+  logger.info(`${result.written} artifacts written`);
+  logger.info(`${result.skippedLarge} skipped large files count`);
+  logger.info(`${result.ignored} ignored files count`);
   output.show();
+}
+
+async function handleCommand(logger, action) {
+  try {
+    await action();
+  } catch (error) {
+    logger.error(error);
+    vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+  }
 }
 
 export function activate(context) {
   const output = vscode.window.createOutputChannel("Codex Context");
+  const logger = createLogger({ sink: { log: (message) => output.appendLine(message), error: (message) => output.appendLine(message) } });
 
   context.subscriptions.push(
     output,
-    vscode.commands.registerCommand("codexContext.newProject", async () => {
+    vscode.commands.registerCommand("codexContext.newProject", () => handleCommand(logger, async () => {
       const name = await vscode.window.showInputBox({ prompt: "Project name" });
       if (!name) return;
       const parent = workspaceRoot() ?? process.cwd();
       const result = runNew(path.join(parent, name));
       vscode.window.showInformationMessage(`Codex Context: created ${result.root}`);
-    }),
-    vscode.commands.registerCommand("codexContext.syncWorkspace", () => {
+    })),
+    vscode.commands.registerCommand("codexContext.syncWorkspace", () => handleCommand(logger, () => {
       const result = runSync(requireWorkspace());
       vscode.window.showInformationMessage(`Codex Context: created ${result.created} missing file(s)`);
-    }),
-    vscode.commands.registerCommand("codexContext.doctorWorkspace", () => {
+    })),
+    vscode.commands.registerCommand("codexContext.doctorWorkspace", () => handleCommand(logger, () => {
       const result = runProjectDoctor(requireWorkspace());
       output.clear();
       output.appendLine("Codex Context Doctor");
       output.appendLine("");
       for (const item of result.results) output.appendLine(item.line);
       output.show();
-    }),
-    vscode.commands.registerCommand("codexContext.upgradeAgents", () => {
+    })),
+    vscode.commands.registerCommand("codexContext.upgradeAgents", () => handleCommand(logger, () => {
       const result = runProjectUpgrade(requireWorkspace());
       vscode.window.showInformationMessage(`Codex Context: ${result.action} .codex/AGENTS.md`);
-    }),
-    vscode.commands.registerCommand("codexContext.setupGlobal", () => {
+    })),
+    vscode.commands.registerCommand("codexContext.setupGlobal", () => handleCommand(logger, () => {
       const result = runGlobalSetup();
       vscode.window.showInformationMessage(`Codex Context: ${result.action} global AGENTS.md`);
-    }),
-    vscode.commands.registerCommand("codexContext.doctorGlobal", () => {
+    })),
+    vscode.commands.registerCommand("codexContext.doctorGlobal", () => handleCommand(logger, () => {
       const result = runGlobalDoctor();
       output.clear();
       output.appendLine("Codex Context Global Doctor");
       output.appendLine("");
       for (const item of result.results) output.appendLine(item.line);
       output.show();
-    }),
-    vscode.commands.registerCommand("codexContext.indexWorkspace", () => {
+    })),
+    vscode.commands.registerCommand("codexContext.indexWorkspace", () => handleCommand(logger, () => {
       output.clear();
-      output.appendLine("indexing started");
+      logger.info("indexing started");
       output.show();
       const result = runContextIndex(requireWorkspace(), { maxFileSizeKb: maxFileSizeKb() });
-      writeIndexReport(output, result);
+      writeIndexReport(output, logger, result);
       vscode.window.showInformationMessage("Codex Context: artifacts written");
-    }),
-    vscode.commands.registerCommand("codexContext.contextDoctor", () => {
+    })),
+    vscode.commands.registerCommand("codexContext.contextDoctor", () => handleCommand(logger, () => {
       const result = runContextDoctor(requireWorkspace());
       output.clear();
       output.appendLine("Codex Context Artifact Doctor");
       output.appendLine("");
       for (const item of result.results) output.appendLine(item.line);
       output.show();
-    })
+    }))
   );
 
   if (vscode.workspace.getConfiguration("codexContext").get("autoIndex", false)) {

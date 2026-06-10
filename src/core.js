@@ -3,241 +3,34 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
-
-export const OLD_START = "<!-- CODEX-CONTEXT-INIT:START -->";
-export const OLD_END = "<!-- CODEX-CONTEXT-INIT:END -->";
-export const PROJECT_START = "<!-- CODEX-CONTEXT-INIT:PROJECT:START -->";
-export const PROJECT_END = "<!-- CODEX-CONTEXT-INIT:PROJECT:END -->";
-export const GLOBAL_START = "<!-- CODEX-CONTEXT-INIT:GLOBAL:START -->";
-export const GLOBAL_END = "<!-- CODEX-CONTEXT-INIT:GLOBAL:END -->";
-
-const DEFAULT_MAX_FILE_SIZE_KB = 300;
-const HEAVY_DIRS = new Set(["node_modules", ".git", "dist", "build", "out", "coverage", ".next", ".nuxt", "target", "vendor", ".venv", "__pycache__"]);
-const CONTEXT_FILES = ["index.json", "summary.md", "symbols.md", "files.md", "routes.md", "dependencies.md", "recent_changes.md"];
-
-export const globalManagedBlock = `${GLOBAL_START}
-# Global Codex Token Optimization Rules
-
-You are operating in AGGRESSIVE TOKEN OPTIMIZATION MODE.
-
-## Global Behavior
-
-- Complete coding tasks with the fewest tokens, fewest file reads, smallest diff, and shortest useful response.
-- Do not explain unless explicitly asked.
-- Do not teach.
-- Do not summarize the repository.
-- Do not restate the user request.
-- Do not provide alternatives unless blocked.
-- Do not create long plans.
-- Ask clarifying questions only when the task is impossible or unsafe without one.
-
-## Context Usage
-
-- Read the minimum files required.
-- Prefer targeted search over broad exploration.
-- Never scan the whole repository unless explicitly requested.
-- Stop reading once enough context is found.
-- Use open files, visible errors, and user-provided context first.
-
-## Editing
-
-- Make the smallest correct change.
-- Prefer local fixes over refactors.
-- Reuse existing patterns.
-- Do not rename, reformat, or reorganize unrelated code.
-- Avoid dependency changes unless essential.
-
-## Validation
-
-- Run only the narrowest relevant check.
-- Prefer targeted tests over full test suites.
-- If validation is skipped, say why in one short sentence.
-
-## Response Format
-
-Return only:
-
-CHANGED
-- path/to/file
-
-VALIDATION
-- command or "not run"
-
-DONE
-${GLOBAL_END}`;
-
-export const projectManagedBlock = `${PROJECT_START}
-# Project Codex Context Rules
-
-## Precomputed Context Engine
-
-Before broad repository search, read these generated context files if present:
-
-1. .codex/context/summary.md
-2. .codex/context/dependencies.md
-3. .codex/context/files.md
-4. .codex/context/symbols.md
-5. .codex/context/routes.md
-6. .codex/context/recent_changes.md
-
-Use these as pre-indexed repository context.
-
-Rules:
-- Prefer these files before scanning directories.
-- Use them to identify the smallest relevant file set.
-- Do not treat them as always complete.
-- If generated context conflicts with source code, source code wins.
-- After meaningful code changes, update the context index by running:
-  \`codex-context-init index\`
-
-## Context Source Priority
-
-Then read these project-maintained files when present:
-
-1. task.md
-2. architecture.md
-3. decision_log.md
-4. project_context.md
-
-Do not scan the repository until these context files have been checked.
-
-## Project Documentation Rules
-
-- Update task.md after meaningful progress.
-- Update decision_log.md only when a technical decision is made.
-- Update architecture.md only when structure, dependencies, boundaries, or data flow change.
-- Update project_context.md only when product goals, constraints, or scope change.
-- Do not generate extra documentation unless requested.
-
-## Project Search Rules
-
-- Prefer context files before broad repository search.
-- Search only files directly related to the current task.
-- Stop searching once sufficient context is found.
-${PROJECT_END}`;
-
-const templates = {
-  "project_context.md": `# Project Context
-
-## Product / Project Name
-
-TODO
-
-## Goal
-
-TODO
-
-## Users
-
-TODO
-
-## Core Features
-
-TODO
-
-## Non-Goals
-
-TODO
-
-## Constraints
-
-- Prefer small, maintainable changes.
-- Prefer existing patterns.
-- Avoid unnecessary dependencies.
-- Optimize Codex token usage.
-
-## Current Scope
-
-TODO
-`,
-  "architecture.md": `# Architecture
-
-## Overview
-
-TODO
-
-## Tech Stack
-
-TODO
-
-## Main Components
-
-TODO
-
-## Data Flow
-
-TODO
-
-## Important Directories
-
-TODO
-
-## Integration Points
-
-TODO
-
-## Constraints
-
-- Keep architecture simple.
-- Avoid premature abstractions.
-- Prefer modular boundaries.
-`,
-  "task.md": `# Task
-
-## Current Task
-
-TODO
-
-## Status
-
-Not started.
-
-## Relevant Files
-
-TODO
-
-## Acceptance Criteria
-
-TODO
-
-## Notes for Codex
-
-- Read this file first.
-- Only inspect files directly related to the current task.
-- Keep changes minimal.
-`,
-  "decision_log.md": `# Decision Log
-
-Record only meaningful technical decisions.
-
-## Format
-
-### YYYY-MM-DD - Decision Title
-
-Decision:
-TODO
-
-Reason:
-TODO
-
-Impact:
-TODO
-`
-};
-
-export const requiredFiles = [
-  path.join(".codex", "AGENTS.md"),
-  path.join(".codex", "templates", "project_context.template.md"),
-  path.join(".codex", "templates", "architecture.template.md"),
-  path.join(".codex", "templates", "task.template.md"),
-  path.join(".codex", "templates", "decision_log.template.md"),
-  "project_context.md",
-  "architecture.md",
-  "task.md",
-  "decision_log.md"
-];
-
-export const contextFiles = CONTEXT_FILES.map((file) => path.join(".codex", "context", file));
+import {
+  DEFAULT_MAX_FILE_SIZE_KB,
+  GLOBAL_END,
+  GLOBAL_START,
+  HEAVY_DIRS,
+  OLD_END,
+  OLD_START,
+  PROJECT_END,
+  PROJECT_START,
+  contextFiles,
+  globalManagedBlock,
+  projectManagedBlock,
+  requiredFiles,
+  templates
+} from "./core/config.js";
+
+export {
+  GLOBAL_END,
+  GLOBAL_START,
+  OLD_END,
+  OLD_START,
+  PROJECT_END,
+  PROJECT_START,
+  contextFiles,
+  globalManagedBlock,
+  projectManagedBlock,
+  requiredFiles
+} from "./core/config.js";
 
 export function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -257,6 +50,13 @@ export function writeFileIfMissing(file, content) {
 export function writeFileForce(file, content) {
   ensureDir(path.dirname(file));
   fs.writeFileSync(file, content, "utf8");
+}
+
+function writeFileAtomic(file, content) {
+  ensureDir(path.dirname(file));
+  const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
+  fs.writeFileSync(temp, content, "utf8");
+  fs.renameSync(temp, file);
 }
 
 export function getGlobalAgentsPath() {
@@ -536,7 +336,7 @@ function hashText(content) {
 
 function writeFileIfChanged(file, content) {
   if (fileExists(file) && hashText(fs.readFileSync(file)) === hashText(content)) return false;
-  writeFileForce(file, content);
+  writeFileAtomic(file, content);
   return true;
 }
 
@@ -863,13 +663,19 @@ export function runContextDoctor(root = process.cwd()) {
     return { file, found, line: `${found ? "OK" : "MISSING"} ${file} ${found ? "found" : "missing"}` };
   });
   const indexPath = path.join(root, ".codex", "context", "index.json");
+  let indexValid = false;
   let generatedAt = "unavailable";
   let fileCount = "unavailable";
+  let noSecretsIndexed = false;
   if (fileExists(indexPath)) {
     try {
       const index = JSON.parse(readText(indexPath));
-      generatedAt = index.generatedAt || "unavailable";
-      fileCount = Number.isInteger(index.fileCount) ? String(index.fileCount) : "unavailable";
+      indexValid = Boolean(index && Array.isArray(index.files));
+      const parsedDate = Date.parse(index.generatedAt);
+      generatedAt = Number.isNaN(parsedDate) ? "invalid generatedAt" : index.generatedAt;
+      const matchesLength = Number.isInteger(index.fileCount) && index.fileCount === index.files.length;
+      fileCount = matchesLength ? String(index.fileCount) : "invalid file count";
+      noSecretsIndexed = index.files.every((file) => file.path && !isIgnoredPath(file.path));
     } catch {
       generatedAt = "invalid index.json";
       fileCount = "invalid index.json";
@@ -879,15 +685,17 @@ export function runContextDoctor(root = process.cwd()) {
   const agentsReferencesContext = fileExists(agentsPath) && readText(agentsPath).includes("Precomputed Context Engine");
   const results = [
     ...artifactResults,
-    { file: "fileCount", found: fileCount !== "unavailable" && fileCount !== "invalid index.json", line: `INFO file count ${fileCount}` },
-    { file: "generatedAt", found: generatedAt !== "unavailable" && generatedAt !== "invalid index.json", line: `INFO generatedAt ${generatedAt}` },
+    { file: "index.json", found: indexValid, line: `${indexValid ? "OK" : "MISSING"} index.json valid` },
+    { file: "fileCount", found: /^\d+$/.test(fileCount), line: `${/^\d+$/.test(fileCount) ? "OK" : "MISSING"} file count ${fileCount}` },
+    { file: "generatedAt", found: !generatedAt.startsWith("invalid") && generatedAt !== "unavailable", line: `${!generatedAt.startsWith("invalid") && generatedAt !== "unavailable" ? "OK" : "MISSING"} generatedAt ${generatedAt}` },
+    { file: "secrets", found: noSecretsIndexed, line: `${noSecretsIndexed ? "OK" : "MISSING"} no secret files indexed` },
     {
       file: path.join(".codex", "AGENTS.md"),
       found: agentsReferencesContext,
       line: `${agentsReferencesContext ? "OK" : "MISSING"} .codex/AGENTS.md references context engine`
     }
   ];
-  return { ok: artifactResults.every((result) => result.found) && agentsReferencesContext, results };
+  return { ok: results.every((result) => result.found), results };
 }
 
 export function runContextClean(root = process.cwd()) {
