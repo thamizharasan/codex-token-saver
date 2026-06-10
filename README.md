@@ -1,7 +1,6 @@
-# codex-token-saver
-A quickstart app to create new projects with template files and Codex instructions to reduce token usage for vibe coding small applications without losing context.
+# codex-context-init
 
-Reusable Node.js CLI for initializing and maintaining Codex context-compression files across repositories.
+Reusable Node.js CLI and VS Code extension for Codex context-compression files.
 
 ## Installation
 
@@ -13,40 +12,59 @@ npm install -g codex-context-init
 
 ```sh
 npm link
-codex-context-init new my-project
+codex-context-init global
 ```
+
+## Global vs project setup
+
+- Global setup writes machine-wide Codex rules to `~/.codex/AGENTS.md`.
+- Project setup writes repository context files and project rules to `.codex/AGENTS.md`.
+- Global rules are for token-saving defaults.
+- Project rules point Codex at repository-specific context sources.
 
 ## Commands
 
 ```sh
+codex-context-init global
+codex-context-init global doctor
 codex-context-init new <project-name> [--force]
 codex-context-init sync
 codex-context-init doctor
 codex-context-init upgrade
+codex-context-init project doctor
+codex-context-init project upgrade
 ```
 
-## VS Code Commands
-
-- Codex Context: New Project
-- Codex Context: Sync Current Workspace
-- Codex Context: Doctor Current Workspace
-- Codex Context: Upgrade AGENTS.md
-
-## Examples
+## Recommended first-time setup
 
 ```sh
-codex-context-init new app
-cd app
+codex-context-init global
+codex-context-init new my-app
+cd my-app
 codex-context-init doctor
-codex-context-init sync
-codex-context-init upgrade
 ```
+
+## Existing project setup
+
+```sh
+cd existing-repo
+codex-context-init sync
+codex-context-init project upgrade
+codex-context-init project doctor
+```
+
+## VS Code usage
+
+- Run `Codex Context: Setup Global Instructions` once per machine.
+- Run `Codex Context: Sync Current Workspace` per repository.
+- Run `Codex Context: Doctor Current Workspace` to check project files.
+- Run `Codex Context: Doctor Global Instructions` to check global setup.
+- Run `Codex Context: Upgrade AGENTS.md` to update project rules.
 
 ## Safety behavior around overwrites
 
-- `new <project-name>` creates required files and skips existing files.
-- `new <project-name> --force` overwrites generated files in the new project.
+- `global` preserves existing global content outside managed markers.
+- `project upgrade` preserves existing project content outside managed markers.
 - `sync` creates missing files only.
-- `sync` never overwrites `.codex/AGENTS.md` or project context files.
-- `doctor` only reports missing files.
-- `upgrade` modifies only `.codex/AGENTS.md` and only updates the managed block.
+- `new <project-name>` skips existing files unless `--force` is passed.
+- `doctor` commands only report status.

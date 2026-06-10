@@ -20,7 +20,9 @@
     "onCommand:codexContext.newProject",
     "onCommand:codexContext.syncWorkspace",
     "onCommand:codexContext.doctorWorkspace",
-    "onCommand:codexContext.upgradeAgents"
+    "onCommand:codexContext.upgradeAgents",
+    "onCommand:codexContext.setupGlobal",
+    "onCommand:codexContext.doctorGlobal"
   ],
   "contributes": {
     "commands": [
@@ -39,6 +41,14 @@
       {
         "command": "codexContext.upgradeAgents",
         "title": "Codex Context: Upgrade AGENTS.md"
+      },
+      {
+        "command": "codexContext.setupGlobal",
+        "title": "Codex Context: Setup Global Instructions"
+      },
+      {
+        "command": "codexContext.doctorGlobal",
+        "title": "Codex Context: Doctor Global Instructions"
       }
     ]
   },

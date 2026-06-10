@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as vscode from "vscode";
-import { runDoctor, runNew, runSync, runUpgrade } from "./core.js";
+import { runGlobalDoctor, runGlobalSetup, runNew, runProjectDoctor, runProjectUpgrade, runSync } from "./core.js";
 
 function workspaceRoot() {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -29,7 +29,7 @@ export function activate(context) {
       vscode.window.showInformationMessage(`Codex Context: created ${result.created} missing file(s)`);
     }),
     vscode.commands.registerCommand("codexContext.doctorWorkspace", () => {
-      const result = runDoctor(requireWorkspace());
+      const result = runProjectDoctor(requireWorkspace());
       output.clear();
       output.appendLine("Codex Context Doctor");
       output.appendLine("");
@@ -37,8 +37,20 @@ export function activate(context) {
       output.show();
     }),
     vscode.commands.registerCommand("codexContext.upgradeAgents", () => {
-      const result = runUpgrade(requireWorkspace());
+      const result = runProjectUpgrade(requireWorkspace());
       vscode.window.showInformationMessage(`Codex Context: ${result.action} .codex/AGENTS.md`);
+    }),
+    vscode.commands.registerCommand("codexContext.setupGlobal", () => {
+      const result = runGlobalSetup();
+      vscode.window.showInformationMessage(`Codex Context: ${result.action} global AGENTS.md`);
+    }),
+    vscode.commands.registerCommand("codexContext.doctorGlobal", () => {
+      const result = runGlobalDoctor();
+      output.clear();
+      output.appendLine("Codex Context Global Doctor");
+      output.appendLine("");
+      for (const item of result.results) output.appendLine(item.line);
+      output.show();
     })
   );
 }

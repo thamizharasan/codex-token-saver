@@ -1,24 +1,60 @@
 #!/usr/bin/env node
 
-import { runDoctor, runNew, runSync, runUpgrade } from "../src/core.js";
+import {
+  runDoctor,
+  runGlobalDoctor,
+  runGlobalSetup,
+  runNew,
+  runProjectDoctor,
+  runProjectUpgrade,
+  runSync,
+  runUpgrade
+} from "../src/core.js";
 
 function usage(code = 0) {
   console.log(`Usage:
   codex-context-init new <project-name> [--force]
+  codex-context-init global [doctor]
+  codex-context-init project <upgrade|doctor>
   codex-context-init sync
   codex-context-init doctor
   codex-context-init upgrade`);
   process.exit(code);
 }
 
-const [command, projectName, ...rest] = process.argv.slice(2);
+const [command, subcommand, ...rest] = process.argv.slice(2);
 const options = { force: rest.includes("--force") };
 
 try {
   switch (command) {
     case "new": {
-      const result = runNew(projectName, options);
+      const result = runNew(subcommand, options);
       console.log(`Created ${result.root}`);
+      break;
+    }
+    case "global": {
+      if (subcommand === "doctor") {
+        const result = runGlobalDoctor();
+        for (const item of result.results) console.log(item.line);
+        process.exit(result.ok ? 0 : 1);
+      }
+      if (subcommand) usage(1);
+      const result = runGlobalSetup();
+      console.log(`${result.action === "created" ? "Created" : "Updated"} ~/.codex/AGENTS.md`);
+      break;
+    }
+    case "project": {
+      if (subcommand === "upgrade") {
+        const result = runProjectUpgrade();
+        console.log(`${result.action === "created" ? "Created" : "Updated"} .codex/AGENTS.md`);
+        break;
+      }
+      if (subcommand === "doctor") {
+        const result = runProjectDoctor();
+        for (const item of result.results) console.log(item.line);
+        process.exit(result.ok ? 0 : 1);
+      }
+      usage(1);
       break;
     }
     case "sync": {

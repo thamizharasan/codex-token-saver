@@ -1,71 +1,50 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
-export const START = "<!-- CODEX-CONTEXT-INIT:START -->";
-export const END = "<!-- CODEX-CONTEXT-INIT:END -->";
+export const OLD_START = "<!-- CODEX-CONTEXT-INIT:START -->";
+export const OLD_END = "<!-- CODEX-CONTEXT-INIT:END -->";
+export const PROJECT_START = "<!-- CODEX-CONTEXT-INIT:PROJECT:START -->";
+export const PROJECT_END = "<!-- CODEX-CONTEXT-INIT:PROJECT:END -->";
+export const GLOBAL_START = "<!-- CODEX-CONTEXT-INIT:GLOBAL:START -->";
+export const GLOBAL_END = "<!-- CODEX-CONTEXT-INIT:GLOBAL:END -->";
 
-export const managedBlock = `${START}
-# Codex Agent Instructions
+export const globalManagedBlock = `${GLOBAL_START}
+# Global Codex Token Optimization Rules
 
 You are operating in AGGRESSIVE TOKEN OPTIMIZATION MODE.
 
-## Primary Goal
+## Global Behavior
 
-Complete the requested coding task with the fewest tokens, fewest file reads, smallest diff, and shortest response possible.
+- Complete coding tasks with the fewest tokens, fewest file reads, smallest diff, and shortest useful response.
+- Do not explain unless explicitly asked.
+- Do not teach.
+- Do not summarize the repository.
+- Do not restate the user request.
+- Do not provide alternatives unless blocked.
+- Do not create long plans.
+- Ask clarifying questions only when the task is impossible or unsafe without one.
 
-## Context Source Priority
-
-Before exploring the repository, read these files in order:
-
-1. task.md
-2. architecture.md
-3. decision_log.md
-4. project_context.md
-
-Use these files as the compressed source of truth.
-
-Do not scan the repository until these context files have been checked.
-
-## Context Rules
+## Context Usage
 
 - Read the minimum files required.
 - Prefer targeted search over broad exploration.
 - Never scan the whole repository unless explicitly requested.
 - Stop reading once enough context is found.
-- Do not open unrelated files.
-- Do not inspect tests unless modifying tested behavior or validation requires it.
-- Use existing open files, visible errors, and user-provided context first.
+- Use open files, visible errors, and user-provided context first.
 
-## Editing Rules
+## Editing
 
 - Make the smallest correct change.
 - Prefer local fixes over refactors.
-- Reuse existing patterns exactly.
-- Do not introduce new abstractions unless required.
+- Reuse existing patterns.
 - Do not rename, reformat, or reorganize unrelated code.
 - Avoid dependency changes unless essential.
-- Avoid comments unless they clarify non-obvious logic.
 
-## Planning Rules
-
-- For simple tasks, edit immediately.
-- Only create a plan when touching 3+ files, changing architecture, or resolving ambiguity.
-- Plans must be at most 3 bullets.
-
-## Documentation Rules
-
-- Update task.md after meaningful progress.
-- Update decision_log.md only when a technical decision is made.
-- Update architecture.md only when structure, dependencies, boundaries, or data flow change.
-- Update project_context.md only when product goals, constraints, or scope change.
-- Do not generate extra documentation unless requested.
-
-## Validation Rules
+## Validation
 
 - Run only the narrowest relevant check.
 - Prefer targeted tests over full test suites.
-- Do not run expensive commands unless necessary.
-- Use quiet flags when available.
 - If validation is skipped, say why in one short sentence.
 
 ## Response Format
@@ -79,9 +58,38 @@ VALIDATION
 - command or "not run"
 
 DONE
+${GLOBAL_END}`;
 
-No extra explanation.
-${END}`;
+export const projectManagedBlock = `${PROJECT_START}
+# Project Codex Context Rules
+
+## Context Source Priority
+
+Before exploring the repository, read these files in order:
+
+1. task.md
+2. architecture.md
+3. decision_log.md
+4. project_context.md
+
+Use these files as the compressed project source of truth.
+
+Do not scan the repository until these context files have been checked.
+
+## Project Documentation Rules
+
+- Update task.md after meaningful progress.
+- Update decision_log.md only when a technical decision is made.
+- Update architecture.md only when structure, dependencies, boundaries, or data flow change.
+- Update project_context.md only when product goals, constraints, or scope change.
+- Do not generate extra documentation unless requested.
+
+## Project Search Rules
+
+- Prefer context files before broad repository search.
+- Search only files directly related to the current task.
+- Stop searching once sufficient context is found.
+${PROJECT_END}`;
 
 const templates = {
   "project_context.md": `# Project Context
@@ -224,9 +232,48 @@ export function writeFileForce(file, content) {
   fs.writeFileSync(file, content, "utf8");
 }
 
+export function getGlobalAgentsPath() {
+  return path.join(os.homedir(), ".codex", "AGENTS.md");
+}
+
+function newlineOf(content) {
+  return content.includes("\r\n") ? "\r\n" : "\n";
+}
+
+function finish(content, newline) {
+  return content.replace(/[\r\n]*$/, "") + newline;
+}
+
+export function upsertManagedBlock(existingContent, startMarker, endMarker, newBlock) {
+  const hasStart = existingContent.includes(startMarker);
+  const hasEnd = existingContent.includes(endMarker);
+  const newline = newlineOf(existingContent || newBlock);
+  const block = newBlock.replace(/\n/g, newline);
+
+  if (hasStart !== hasEnd) {
+    return { ok: false, error: "Managed block has only one marker." };
+  }
+
+  if (hasStart) {
+    const start = existingContent.indexOf(startMarker);
+    const end = existingContent.indexOf(endMarker);
+    if (end < start) return { ok: false, error: "Managed block markers are out of order." };
+    const next = existingContent.slice(0, start) + block + existingContent.slice(end + endMarker.length);
+    return { ok: true, content: finish(next, newline), action: "updated" };
+  }
+
+  const base = existingContent.trimEnd();
+  const next = base ? `${base}${newline}${newline}${block}` : block;
+  return { ok: true, content: finish(next, newline), action: existingContent ? "appended" : "created" };
+}
+
+function migrateOldProjectMarkers(content) {
+  return content.replace(OLD_START, PROJECT_START).replace(OLD_END, PROJECT_END);
+}
+
 function filesFor(root) {
   return {
-    [path.join(root, ".codex", "AGENTS.md")]: managedBlock,
+    [path.join(root, ".codex", "AGENTS.md")]: projectManagedBlock,
     [path.join(root, ".codex", "templates", "project_context.template.md")]: templates["project_context.md"],
     [path.join(root, ".codex", "templates", "architecture.template.md")]: templates["architecture.md"],
     [path.join(root, ".codex", "templates", "task.template.md")]: templates["task.md"],
@@ -263,7 +310,7 @@ export function runSync(root = process.cwd()) {
   return { root, created };
 }
 
-export function runDoctor(root = process.cwd()) {
+export function runProjectDoctor(root = process.cwd()) {
   const results = requiredFiles.map((file) => {
     const found = fileExists(path.join(root, file));
     return { file, found, line: `${found ? "✓" : "✗"} ${file} ${found ? "found" : "missing"}` };
@@ -271,20 +318,40 @@ export function runDoctor(root = process.cwd()) {
   return { ok: results.every((result) => result.found), results };
 }
 
-export function runUpgrade(root = process.cwd()) {
+export function runDoctor(root = process.cwd()) {
+  return runProjectDoctor(root);
+}
+
+export function runProjectUpgrade(root = process.cwd()) {
   const file = path.join(root, ".codex", "AGENTS.md");
-  if (!fileExists(file)) {
-    writeFileForce(file, managedBlock);
-    return { file, action: "created" };
-  }
+  const existing = fileExists(file) ? migrateOldProjectMarkers(fs.readFileSync(file, "utf8")) : "";
+  const result = upsertManagedBlock(existing, PROJECT_START, PROJECT_END, projectManagedBlock);
+  if (!result.ok) throw new Error(result.error);
+  writeFileForce(file, result.content);
+  return { file, action: result.action };
+}
 
-  const existing = fs.readFileSync(file, "utf8");
-  const start = existing.indexOf(START);
-  const end = existing.indexOf(END);
-  const next = start >= 0 && end > start
-    ? existing.slice(0, start) + managedBlock + existing.slice(end + END.length)
-    : `${existing.trimEnd()}\n\n${managedBlock}\n`;
+export function runUpgrade(root = process.cwd()) {
+  return runProjectUpgrade(root);
+}
 
-  writeFileForce(file, next);
-  return { file, action: "updated" };
+export function runGlobalSetup() {
+  const file = getGlobalAgentsPath();
+  const existing = fileExists(file) ? fs.readFileSync(file, "utf8") : "";
+  const result = upsertManagedBlock(existing, GLOBAL_START, GLOBAL_END, globalManagedBlock);
+  if (!result.ok) throw new Error(result.error);
+  writeFileForce(file, result.content);
+  return { file, action: result.action };
+}
+
+export function runGlobalDoctor() {
+  const file = getGlobalAgentsPath();
+  const exists = fileExists(file);
+  const content = exists ? fs.readFileSync(file, "utf8") : "";
+  const hasBlock = content.includes(GLOBAL_START) && content.includes(GLOBAL_END);
+  const results = [
+    { found: exists, line: `${exists ? "✓" : "✗"} ~/.codex/AGENTS.md ${exists ? "found" : "missing"}` },
+    { found: hasBlock, line: `${hasBlock ? "✓" : "✗"} global managed block ${hasBlock ? "found" : "missing"}` }
+  ];
+  return { ok: results.every((result) => result.found), results };
 }
