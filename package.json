@@ -16,8 +16,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-  ],
   "contributes": {
     "commands": [
       {
