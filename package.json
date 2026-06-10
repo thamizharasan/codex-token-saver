@@ -41,8 +41,36 @@
       {
         "command": "codexContext.doctorGlobal",
         "title": "Codex Context: Doctor Global Instructions"
+      },
+      {
+        "command": "codexContext.indexWorkspace",
+        "title": "Codex Context: Index Current Workspace"
+      },
+      {
+        "command": "codexContext.contextDoctor",
+        "title": "Codex Context: Doctor Context Artifacts"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Codex Context",
+      "properties": {
+        "codexContext.autoIndex": {
+          "type": "boolean",
+          "default": false,
+          "description": "Offer to index Codex context on activation for workspaces with fewer than 1000 eligible files."
+        },
+        "codexContext.watch": {
+          "type": "boolean",
+          "default": false,
+          "description": "Reserved for future context indexing watch mode."
+        },
+        "codexContext.maxFileSizeKb": {
+          "type": "number",
+          "default": 300,
+          "description": "Maximum file size, in KB, to include in Codex context indexing."
+        }
+      }
+    }
   },
   "devDependencies": {
     "vscode": "^1.1.45"
