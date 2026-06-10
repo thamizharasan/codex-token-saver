@@ -1,0 +1,49 @@
+{
+  "name": "codex-context-init",
+  "version": "0.1.0",
+  "description": "Initialize and maintain Codex context-compression files.",
+  "type": "module",
+  "main": "./src/extension.js",
+  "bin": {
+    "codex-context-init": "./bin/codex-context-init.js"
+  },
+  "scripts": {
+    "check": "node --check bin/codex-context-init.js && node --check src/core.js && node --check src/extension.js"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:codexContext.newProject",
+    "onCommand:codexContext.syncWorkspace",
+    "onCommand:codexContext.doctorWorkspace",
+    "onCommand:codexContext.upgradeAgents"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "codexContext.newProject",
+        "title": "Codex Context: New Project"
+      },
+      {
+        "command": "codexContext.syncWorkspace",
+        "title": "Codex Context: Sync Current Workspace"
+      },
+      {
+        "command": "codexContext.doctorWorkspace",
+        "title": "Codex Context: Doctor Current Workspace"
+      },
+      {
+        "command": "codexContext.upgradeAgents",
+        "title": "Codex Context: Upgrade AGENTS.md"
+      }
+    ]
+  },
+  "devDependencies": {
+    "vscode": "^1.1.45"
+  },
+  "license": "MIT"
+}
