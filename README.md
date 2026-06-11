@@ -1,227 +1,94 @@
-# codex-context-init
+# Codex Token Saver
 
-Reusable Node.js CLI and VS Code extension for Codex context-compression files.
+A local-first CLI + VS Code extension that prepares Codex with compressed repository context so it can search less, read fewer files, and start coding with better context.
+
+Codex Token Saver, published as `codex-context-init`, supports:
+
+- CLI workflows
+- VS Code extension commands
+- Global Codex instructions in `~/.codex/AGENTS.md`
+- Per-project `.codex/AGENTS.md`
+- Precomputed `.codex/context` artifacts
+
+## Problem
+
+AI coding agents often spend tokens rediscovering repository structure, reading unrelated files, and rebuilding context across sessions. That repeated exploration is useful, but it can be wasteful when the same project shape, files, symbols, dependencies, routes, and recent changes can be summarized ahead of time.
+
+Codex Token Saver creates compact, local context files that Codex can read before doing broad repository search.
+
+## Before
+
+```mermaid
+flowchart TD
+    A[User asks Codex for a change] --> B[Codex searches repository]
+    B --> C[Codex opens many files]
+    C --> D[Codex builds temporary context]
+    D --> E[Codex edits code]
+    E --> F[Context is lost after the session]
+```
+
+## After
+
+```mermaid
+flowchart TD
+    A[Run codex-context-init index] --> B[Generate .codex/context artifacts]
+    B --> C[Update .codex/AGENTS.md]
+    C --> D[User asks Codex for a change]
+    D --> E[Codex reads compact context first]
+    E --> F[Codex opens fewer, more relevant files]
+    F --> G[Codex edits code]
+```
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Repository] --> B[Context Engine]
+    B --> C[.codex/context]
+    C --> D[summary.md]
+    C --> E[files.md]
+    C --> F[symbols.md]
+    C --> G[dependencies.md]
+    C --> H[routes.md]
+    C --> I[index.json]
+    C --> J[recent_changes.md]
+    B --> K[.codex/AGENTS.md]
+    K --> L[Codex Agent]
+    C --> L
+```
+
+## Key Features
+
+- Global Codex token-saving rules
+- Project-level `AGENTS.md` setup
+- Context indexing
+- File inventory
+- Symbol extraction
+- Dependency summary
+- Route hints
+- Recent git changes
+- Context doctor
+- Context clean
+- CLI + VS Code extension
+- Local-only indexing
+- Cross-platform support: Windows, macOS, Linux
 
 ## Installation
+
+Install globally:
 
 ```sh
 npm install -g codex-context-init
 ```
 
-## Local usage with npm link
+Use locally during development:
 
 ```sh
+npm install
 npm link
-codex-context-init global
 ```
 
-## Global vs project setup
-
-- Global setup writes machine-wide Codex rules to `~/.codex/AGENTS.md`.
-- Project setup writes repository context files and project rules to `.codex/AGENTS.md`.
-- Global rules are for token-saving defaults.
-- Project rules point Codex at repository-specific context sources.
-
-## What the Context Engine does
-
-The Context Engine pre-indexes a project locally and writes compact artifacts under `.codex/context/`. Codex can read these files first to understand likely project type, important files, symbols, dependencies, routes, and recent git changes before opening source files.
-
-## Why generated files instead of direct agent injection
-
-Codex does not need runtime injection for this workflow. Generated files plus `.codex/AGENTS.md` instructions are portable, reviewable, local-only, and work across CLI, VS Code, and normal repository workflows.
-
-## Commands
-
-```sh
-codex-context-init global
-codex-context-init global doctor
-codex-context-init new <project-name> [--force]
-codex-context-init index
-codex-context-init index --watch
-codex-context-init context doctor
-codex-context-init context clean
-codex-context-init sync
-codex-context-init doctor
-codex-context-init upgrade
-codex-context-init project doctor
-codex-context-init project upgrade
-```
-
-## Expected command output
-
-### `codex-context-init global`
-
-```txt
-Created ~/.codex/AGENTS.md
-```
-
-or:
-
-```txt
-Updated ~/.codex/AGENTS.md
-```
-
-### `codex-context-init global doctor`
-
-```txt
-OK ~/.codex/AGENTS.md found
-OK global managed block found
-```
-
-If setup is missing, one or more lines begin with `MISSING` and the command exits with code `1`.
-
-### `codex-context-init new <project-name> [--force]`
-
-```txt
-Created /absolute/path/to/project-name
-```
-
-Creates project context files and `.codex/AGENTS.md`. Existing files are skipped unless `--force` is passed.
-
-### `codex-context-init sync`
-
-```txt
-Created 3 missing file(s)
-```
-
-The count may be `0`. Existing files are never overwritten.
-
-### `codex-context-init doctor`
-
-```txt
-OK .codex/AGENTS.md found
-OK .codex/templates/project_context.template.md found
-OK .codex/templates/architecture.template.md found
-OK .codex/templates/task.template.md found
-OK .codex/templates/decision_log.template.md found
-OK project_context.md found
-OK architecture.md found
-OK task.md found
-OK decision_log.md found
-```
-
-Missing files are reported with `MISSING`; exit code is `1` if any required file is missing.
-
-### `codex-context-init upgrade`
-
-```txt
-Updated .codex/AGENTS.md
-```
-
-or:
-
-```txt
-Created .codex/AGENTS.md
-```
-
-### `codex-context-init project doctor`
-
-Same output and exit-code behavior as `codex-context-init doctor`.
-
-### `codex-context-init project upgrade`
-
-Same output and behavior as `codex-context-init upgrade`.
-
-### `codex-context-init index`
-
-```txt
-Indexed 42 file(s)
-Wrote 7 changed context artifact(s)
-Skipped 1 large file(s)
-Ignored 5 file(s) or directories
-```
-
-Also upgrades `.codex/AGENTS.md` so Codex reads generated context first.
-
-### `codex-context-init index --watch`
-
-```txt
-Indexed 42 file(s)
-Wrote 7 changed context artifact(s)
-Skipped 1 large file(s)
-Ignored 5 file(s) or directories
-Watching for changes. Press Ctrl+C to stop.
-```
-
-After file changes, the index output repeats after a 1000ms debounce.
-
-### `codex-context-init context doctor`
-
-```txt
-OK .codex/context/index.json found
-OK .codex/context/summary.md found
-OK .codex/context/symbols.md found
-OK .codex/context/files.md found
-OK .codex/context/routes.md found
-OK .codex/context/dependencies.md found
-OK .codex/context/recent_changes.md found
-INFO file count 42
-INFO generatedAt 2026-06-11T10:00:00.000Z
-OK .codex/AGENTS.md references context engine
-```
-
-Missing artifacts are reported with `MISSING`; exit code is `1` if required artifacts or the AGENTS.md context reference are missing.
-
-### `codex-context-init context clean`
-
-```txt
-Removed .codex/context
-```
-
-or:
-
-```txt
-No context directory at .codex/context
-```
-
-## Recommended first-time setup
-
-```sh
-codex-context-init global
-codex-context-init new my-app
-cd my-app
-codex-context-init doctor
-codex-context-init index
-codex-context-init context doctor
-```
-
-## Codex workflow
-
-```sh
-codex-context-init global
-codex-context-init sync
-codex-context-init index
-codex-context-init project upgrade
-```
-
-## Existing project setup
-
-```sh
-cd existing-repo
-codex-context-init sync
-codex-context-init project upgrade
-codex-context-init index
-codex-context-init project doctor
-```
-
-## VS Code usage
-
-- Run `Codex Context: Setup Global Instructions` once per machine.
-- Run `Codex Context: Sync Current Workspace` per repository.
-- Run `Codex Context: Index Current Workspace` to generate `.codex/context` artifacts.
-- Run `Codex Context: Doctor Current Workspace` to check project files.
-- Run `Codex Context: Doctor Context Artifacts` to check generated artifacts.
-- Run `Codex Context: Doctor Global Instructions` to check global setup.
-- Run `Codex Context: Upgrade AGENTS.md` to update project rules.
-
-## VS Code workflow
-
-1. Install extension.
-2. Open project.
-3. Run `Codex Context: Index Current Workspace`.
-4. Ask Codex normally.
-
-## Run the extension locally
+Run the VS Code extension locally:
 
 ```sh
 npm install
@@ -230,38 +97,136 @@ code .
 
 Press F5 and choose `Run Extension` if prompted. In the Extension Development Host, open a test folder, then run `Codex Context` commands from the Command Palette.
 
-## Context engine
+## Quick Start
 
-`codex-context-init index` scans the current project locally and writes:
-
-```txt
-.codex/context/index.json
-.codex/context/summary.md
-.codex/context/symbols.md
-.codex/context/files.md
-.codex/context/routes.md
-.codex/context/dependencies.md
-.codex/context/recent_changes.md
+```sh
+codex-context-init global
+codex-context-init sync
+codex-context-init index
+codex-context-init doctor
+codex-context-init context doctor
 ```
 
-The indexer ignores common heavy directories, secrets, binary files, and files larger than the configured max size. No code is sent outside the machine.
+## Recommended Workflows
 
-`index.json` includes generated time, root name, file count, language counts, and per-file hashes, imports, exports, symbols, route hints, and test hints. Markdown artifacts are deterministic summaries for Codex to read before opening repository files.
+### First-Time New Project
 
-`recent_changes.md` uses `git status --short` when available and writes `Git status unavailable.` when git is unavailable.
+```sh
+codex-context-init global
+codex-context-init new my-app
+cd my-app
+codex-context-init index
+codex-context-init doctor
+```
+
+### Existing Project
+
+```sh
+cd existing-repo
+codex-context-init sync
+codex-context-init project upgrade
+codex-context-init index
+codex-context-init context doctor
+```
+
+### VS Code
+
+Run these from the Command Palette:
+
+```txt
+Codex Context: Setup Global Instructions
+Codex Context: Sync Current Workspace
+Codex Context: Index Current Workspace
+Codex Context: Doctor Context Artifacts
+```
+
+## Command Reference
+
+| Command | What it does | When to use it | Overwrites files? | Example |
+| --- | --- | --- | --- | --- |
+| `codex-context-init global` | Creates or updates global Codex token-saving instructions. | Once per machine. | Only managed block in `~/.codex/AGENTS.md`; preserves user content. | `codex-context-init global` |
+| `codex-context-init global doctor` | Checks global `AGENTS.md` and managed block. | Debug global setup. | No. | `codex-context-init global doctor` |
+| `codex-context-init new <project-name> [--force]` | Creates a new project with Codex context files. | Starting a new repo. | Skips existing files unless `--force` is passed. | `codex-context-init new my-app` |
+| `codex-context-init sync` | Creates missing project files in the current repo. | Existing repo setup. | No. | `codex-context-init sync` |
+| `codex-context-init doctor` | Checks required project files. | Verify project setup. | No. | `codex-context-init doctor` |
+| `codex-context-init upgrade` | Updates project `.codex/AGENTS.md`. | Refresh project instructions. | Only managed block; preserves user content. | `codex-context-init upgrade` |
+| `codex-context-init project doctor` | Alias for project doctor. | Explicit project checks. | No. | `codex-context-init project doctor` |
+| `codex-context-init project upgrade` | Alias for project upgrade. | Explicit project upgrade. | Only managed block; preserves user content. | `codex-context-init project upgrade` |
+| `codex-context-init index` | Generates `.codex/context` artifacts and upgrades project instructions. | Before asking Codex for project work. | Rewrites generated context artifacts only when changed. | `codex-context-init index` |
+| `codex-context-init index --watch` | Watches files and re-indexes after changes. | Active development. | Same as `index`. | `codex-context-init index --watch` |
+| `codex-context-init context doctor` | Validates context artifacts, `index.json`, file count, timestamp, AGENTS reference, and secret exclusions. | Debug generated context. | No. | `codex-context-init context doctor` |
+| `codex-context-init context clean` | Deletes only `.codex/context`. | Rebuild context from scratch. | Deletes generated context directory only. | `codex-context-init context clean` |
+
+`codex-context-init debug` is not currently implemented.
+
+## Generated Files
+
+| File | Purpose |
+| --- | --- |
+| `~/.codex/AGENTS.md` | Global Codex token-saving instructions. |
+| `.codex/AGENTS.md` | Project instructions that tell Codex to read generated context first. |
+| `.codex/context/index.json` | Machine-readable index with file metadata, hashes, imports, exports, symbols, routes, and test hints. |
+| `.codex/context/summary.md` | Compact project overview. |
+| `.codex/context/files.md` | Human-readable file map grouped by top-level folder. |
+| `.codex/context/symbols.md` | Detected functions, classes, components, exports, and headings. |
+| `.codex/context/dependencies.md` | Dependency files, package scripts, and dependency names. |
+| `.codex/context/routes.md` | Heuristic route hints from framework and router patterns. |
+| `.codex/context/recent_changes.md` | `git status --short` output when git is available. |
+| `project_context.md` | User-maintained project goals and scope. |
+| `architecture.md` | User-maintained architecture notes. |
+| `task.md` | User-maintained current task context. |
+| `decision_log.md` | User-maintained durable technical decisions. |
+
+## Expected Token Usage Improvements
+
+Token savings vary by repository size, task type, and agent behavior. The biggest savings usually come from reducing repeated repository exploration. Small repositories may see modest gains; large repositories and monorepos may see more meaningful gains.
+
+Rough estimates, not guaranteed benchmarks:
+
+| Repository size | Possible reduction in context/tool exploration |
+| --- | --- |
+| Small repo | 5-15% |
+| Medium repo | 15-35% |
+| Large repo / monorepo | 25-50%+ |
+
+## Safety
+
+- Local-only indexing.
+- No external API calls.
+- Secret files are ignored, including `.env`, `.env.*`, `*.pem`, `*.key`, `id_rsa`, `id_ed25519`, `secrets.*`, and `credentials.*`.
+- Large files are skipped.
+- `sync` never overwrites existing files.
+- Managed `AGENTS.md` blocks preserve user content outside markers.
+- `context clean` deletes only `.codex/context`.
 
 ## Limitations
 
 - Heuristic parser.
+- Not a vector database.
 - No embeddings in v1.
-- Generated context may be stale.
+- Not direct runtime injection into Codex.
 - Source code remains source of truth.
+- Generated context can become stale unless re-indexed.
 
-## Safety behavior around overwrites
+## Troubleshooting
 
-- `global` preserves existing global content outside managed markers.
-- `project upgrade` preserves existing project content outside managed markers.
-- `sync` creates missing files only.
-- `new <project-name>` skips existing files unless `--force` is passed.
-- `doctor` commands only report status.
-- `context clean` deletes only `.codex/context`.
+Check project setup:
+
+```sh
+codex-context-init doctor
+```
+
+Check generated context:
+
+```sh
+codex-context-init context doctor
+```
+
+Rebuild generated context:
+
+```sh
+codex-context-init context clean
+codex-context-init index
+```
+
+`codex-context-init debug` is not currently available. Use `--verbose` with CLI commands for stack traces when debugging command failures.
