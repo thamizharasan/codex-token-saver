@@ -221,6 +221,15 @@ codex-context-init project doctor
 3. Run `Codex Context: Index Current Workspace`.
 4. Ask Codex normally.
 
+## Run the extension locally
+
+```sh
+npm install
+code .
+```
+
+Press F5 and choose `Run Extension` if prompted. In the Extension Development Host, open a test folder, then run `Codex Context` commands from the Command Palette.
+
 ## Context engine
 
 `codex-context-init index` scans the current project locally and writes:

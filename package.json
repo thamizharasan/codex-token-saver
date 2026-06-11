@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "description": "Initialize and maintain Codex context-compression files.",
   "type": "module",
-  "main": "./src/extension.js",
+  "main": "./src/extension/extension.cjs",
   "bin": {
     "codex-context-init": "./bin/codex-context-init.js"
   },
   "scripts": {
-    "check": "node --check bin/codex-context-init.js && node --check src/core.js && node --check src/extension.js",
+    "check": "node --check bin/codex-context-init.js && node --check src/core.js && node --check src/extension/extension.cjs",
     "test": "node --test"
   },
   "engines": {
@@ -72,9 +72,6 @@
         }
       }
     }
-  },
-  "devDependencies": {
-    "vscode": "^1.1.45"
   },
   "license": "MIT"
 }
