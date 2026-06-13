@@ -28,6 +28,8 @@ const [command, subcommand, ...rest] = args;
 const options = { force: rest.includes("--force") };
 const logger = createLogger({ verbose });
 
+if (!command || command === "--help" || command === "-h" || command === "help") usage(0);
+
 function usage(code = 0) {
   logger.info(`Usage:
   codex-context-init new <project-name> [--force]

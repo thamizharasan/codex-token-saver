@@ -1,16 +1,30 @@
 {
-  "name": "codex-context-init",
-  "version": "0.1.0",
-  "description": "Initialize and maintain Codex context-compression files.",
+  "name": "codex-token-saver",
+  "version": "1.0.0",
+  "description": "Local-first Codex context engine for reducing repository exploration",
   "type": "module",
   "displayName": "Codex Token Saver",
+  "keywords": [
+    "codex",
+    "cli",
+    "vscode-extension",
+    "context",
+    "developer-tools"
+  ],
+  "author": "Thamizharasan",
   "repository": {
     "type": "git",
-    "url": "https://github.com/thamizharasan/codex-token-saver.git"
+    "url": "git+https://github.com/thamizharasan/codex-token-saver.git"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "main": "./src/extension/extension.cjs",
   "bin": {
-    "codex-context-init": "./bin/codex-context-init.js"
+    "codex-context-init": "bin/codex-context-init.js"
   },
   "scripts": {
     "check": "node --check bin/codex-context-init.js && node --check src/core.js && node --check src/extension/extension.cjs",
@@ -82,5 +96,9 @@
       }
     }
   },
+  "bugs": {
+    "url": "https://github.com/thamizharasan/codex-token-saver/issues"
+  },
+  "homepage": "https://github.com/thamizharasan/codex-token-saver#readme",
   "license": "MIT"
 }

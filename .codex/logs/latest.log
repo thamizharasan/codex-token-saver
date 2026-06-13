@@ -17,3 +17,45 @@
   codex-context-init doctor
   codex-context-init debug
   codex-context-init upgrade
+2026-06-13T22:34:22.049Z [INFO] Usage:
+  codex-context-init new <project-name> [--force]
+  codex-context-init global [doctor]
+  codex-context-init project <upgrade|doctor>
+  codex-context-init index [--watch]
+  codex-context-init context <doctor|clean>
+  codex-context-init query "<question>" [--top 10]
+  codex-context-init sync
+  codex-context-init doctor
+  codex-context-init debug
+  codex-context-init upgrade
+2026-06-13T22:34:28.198Z [INFO] OS win32 10.0.26200
+2026-06-13T22:34:28.199Z [INFO] Node v24.16.0
+2026-06-13T22:34:28.199Z [INFO] CLI version 0.1.0
+2026-06-13T22:34:28.200Z [INFO] OK global AGENTS C:\Users\Thamizh\.codex\AGENTS.md
+2026-06-13T22:34:28.200Z [INFO] MISSING project AGENTS C:\Users\Thamizh\Coding\VS Projects\codex-context-init\.codex\AGENTS.md
+2026-06-13T22:34:28.200Z [INFO] MISSING context status
+2026-06-13T22:34:28.201Z [INFO] MISSING relevant.md missing
+2026-06-13T22:34:28.201Z [INFO] relevant.md modified n/a
+2026-06-13T22:34:28.201Z [INFO] Log location C:\Users\Thamizh\Coding\VS Projects\codex-context-init\.codex\logs\latest.log
+2026-06-13T22:53:57.057Z [INFO] Usage:
+  codex-context-init new <project-name> [--force]
+  codex-context-init global [doctor]
+  codex-context-init project <upgrade|doctor>
+  codex-context-init index [--watch]
+  codex-context-init context <doctor|clean>
+  codex-context-init query "<question>" [--top 10]
+  codex-context-init sync
+  codex-context-init doctor
+  codex-context-init debug
+  codex-context-init upgrade
+2026-06-13T22:54:30.611Z [INFO] Usage:
+  codex-context-init new <project-name> [--force]
+  codex-context-init global [doctor]
+  codex-context-init project <upgrade|doctor>
+  codex-context-init index [--watch]
+  codex-context-init context <doctor|clean>
+  codex-context-init query "<question>" [--top 10]
+  codex-context-init sync
+  codex-context-init doctor
+  codex-context-init debug
+  codex-context-init upgrade
