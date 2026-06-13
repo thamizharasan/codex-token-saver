@@ -8,8 +8,17 @@ export const GLOBAL_START = "<!-- CODEX-CONTEXT-INIT:GLOBAL:START -->";
 export const GLOBAL_END = "<!-- CODEX-CONTEXT-INIT:GLOBAL:END -->";
 
 export const DEFAULT_MAX_FILE_SIZE_KB = 300;
+export const SCHEMA_VERSION = 2;
+export const GENERATOR_VERSION = "0.1.0";
 export const HEAVY_DIRS = new Set(["node_modules", ".git", "dist", "build", "out", "coverage", ".next", ".nuxt", "target", "vendor", ".venv", "__pycache__"]);
 export const CONTEXT_FILES = ["index.json", "summary.md", "symbols.md", "files.md", "routes.md", "dependencies.md", "recent_changes.md"];
+export const RELEVANT_CONTEXT_FILE = "relevant.md";
+export const SECRET_FILE_NAMES = new Set([".env", "id_rsa", "id_ed25519"]);
+export const SECRET_PREFIXES = [".env.", "secrets.", "credentials."];
+export const SECRET_SUFFIXES = [".pem", ".key"];
+export const DEPENDENCY_FILES = ["package.json", "requirements.txt", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "build.gradle"];
+export const RELEVANT_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".rs", ".go", ".java", ".cs", ".json", ".md", ".yml", ".yaml", ".toml", ".gradle", ".xml"]);
+export const RELEVANT_FILE_NAMES = new Set([...DEPENDENCY_FILES.map((file) => file.toLowerCase()), "dockerfile"]);
 
 export const requiredFiles = [
   path.join(".codex", "AGENTS.md"),
@@ -83,17 +92,22 @@ export const projectManagedBlock = `${PROJECT_START}
 
 Before broad repository search, read these generated context files if present:
 
-1. .codex/context/summary.md
-2. .codex/context/dependencies.md
-3. .codex/context/files.md
-4. .codex/context/symbols.md
-5. .codex/context/routes.md
-6. .codex/context/recent_changes.md
+1. .codex/context/relevant.md
+2. .codex/context/summary.md
+3. .codex/context/dependencies.md
+4. .codex/context/files.md
+5. .codex/context/symbols.md
+6. .codex/context/routes.md
+7. .codex/context/recent_changes.md
+8. .codex/context/index.json
+
+If \`.codex/context/relevant.md\` exists, treat it as the task-specific context shortlist generated from the user's latest query.
 
 Use these as pre-indexed repository context.
 
 Rules:
 - Prefer these files before scanning directories.
+- Use importance scores to identify likely relevant files.
 - Use them to identify the smallest relevant file set.
 - Do not treat them as always complete.
 - If generated context conflicts with source code, source code wins.

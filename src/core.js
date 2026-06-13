@@ -3,8 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { ensureDir, fileExists, writeFileAtomic, writeFileForce, writeFileIfMissing } from "./core/utils/fsSafe.js";
+import { createLogger } from "./core/utils/logger.js";
 import {
   DEFAULT_MAX_FILE_SIZE_KB,
+  DEPENDENCY_FILES,
+  GENERATOR_VERSION,
   GLOBAL_END,
   GLOBAL_START,
   HEAVY_DIRS,
@@ -12,12 +16,21 @@ import {
   OLD_START,
   PROJECT_END,
   PROJECT_START,
+  RELEVANT_EXTENSIONS,
+  RELEVANT_FILE_NAMES,
+  RELEVANT_CONTEXT_FILE,
+  SCHEMA_VERSION,
+  SECRET_FILE_NAMES,
+  SECRET_PREFIXES,
+  SECRET_SUFFIXES,
   contextFiles,
   globalManagedBlock,
   projectManagedBlock,
   requiredFiles,
   templates
-} from "./core/config.js";
+} from "./core/utils/config.js";
+import { parseFile } from "./core/parsers/index.js";
+import { queryTerms, scoreFileForQuery } from "./core/scoring/queryScorer.js";
 
 export {
   GLOBAL_END,
@@ -30,34 +43,8 @@ export {
   globalManagedBlock,
   projectManagedBlock,
   requiredFiles
-} from "./core/config.js";
-
-export function ensureDir(dir) {
-  fs.mkdirSync(dir, { recursive: true });
-}
-
-export function fileExists(file) {
-  return fs.existsSync(file);
-}
-
-export function writeFileIfMissing(file, content) {
-  if (fileExists(file)) return false;
-  ensureDir(path.dirname(file));
-  fs.writeFileSync(file, content, "utf8");
-  return true;
-}
-
-export function writeFileForce(file, content) {
-  ensureDir(path.dirname(file));
-  fs.writeFileSync(file, content, "utf8");
-}
-
-function writeFileAtomic(file, content) {
-  ensureDir(path.dirname(file));
-  const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
-  fs.writeFileSync(temp, content, "utf8");
-  fs.renameSync(temp, file);
-}
+} from "./core/utils/config.js";
+export { createLogger, ensureDir, fileExists, writeFileAtomic, writeFileForce, writeFileIfMissing };
 
 export function getGlobalAgentsPath() {
   return path.join(os.homedir(), ".codex", "AGENTS.md");
@@ -111,6 +98,7 @@ function filesFor(root) {
 }
 
 export function runNew(projectName, options = {}) {
+  const started = Date.now();
   if (!projectName) throw new Error("Project name is required");
   const root = path.resolve(projectName);
   ensureDir(root);
@@ -124,15 +112,16 @@ export function runNew(projectName, options = {}) {
       created += 1;
     }
   }
-  return { root, created, updated };
+  return { ok: true, action: "new", root, created, updated, durationMs: Date.now() - started, warnings: [] };
 }
 
 export function runSync(root = process.cwd()) {
+  const started = Date.now();
   let created = 0;
   for (const [file, content] of Object.entries(filesFor(root))) {
     if (writeFileIfMissing(file, content)) created += 1;
   }
-  return { root, created };
+  return { ok: true, action: "sync", root, created, durationMs: Date.now() - started, warnings: [] };
 }
 
 export function runProjectDoctor(root = process.cwd()) {
@@ -148,12 +137,13 @@ export function runDoctor(root = process.cwd()) {
 }
 
 export function runProjectUpgrade(root = process.cwd()) {
+  const started = Date.now();
   const file = path.join(root, ".codex", "AGENTS.md");
   const existing = fileExists(file) ? migrateOldProjectMarkers(fs.readFileSync(file, "utf8")) : "";
   const result = upsertManagedBlock(existing, PROJECT_START, PROJECT_END, projectManagedBlock);
   if (!result.ok) throw new Error(result.error);
   writeFileForce(file, result.content);
-  return { file, action: result.action };
+  return { ok: true, command: "project-upgrade", action: result.action, file, durationMs: Date.now() - started, warnings: [] };
 }
 
 export function runUpgrade(root = process.cwd()) {
@@ -161,12 +151,13 @@ export function runUpgrade(root = process.cwd()) {
 }
 
 export function runGlobalSetup() {
+  const started = Date.now();
   const file = getGlobalAgentsPath();
   const existing = fileExists(file) ? fs.readFileSync(file, "utf8") : "";
   const result = upsertManagedBlock(existing, GLOBAL_START, GLOBAL_END, globalManagedBlock);
   if (!result.ok) throw new Error(result.error);
   writeFileForce(file, result.content);
-  return { file, action: result.action };
+  return { ok: true, command: "global", action: result.action, file, durationMs: Date.now() - started, warnings: [] };
 }
 
 export function runGlobalDoctor() {
@@ -182,14 +173,9 @@ export function runGlobalDoctor() {
 }
 
 function isSecretFile(name) {
-  return name === ".env"
-    || name.startsWith(".env.")
-    || name.endsWith(".pem")
-    || name.endsWith(".key")
-    || name === "id_rsa"
-    || name === "id_ed25519"
-    || name.startsWith("secrets.")
-    || name.startsWith("credentials.");
+  return SECRET_FILE_NAMES.has(name)
+    || SECRET_PREFIXES.some((prefix) => name.startsWith(prefix))
+    || SECRET_SUFFIXES.some((suffix) => name.endsWith(suffix));
 }
 
 function toDisplayPath(file) {
@@ -223,8 +209,7 @@ function languageFor(file) {
 function isRelevantFile(file) {
   const ext = path.extname(file).toLowerCase();
   const name = path.basename(file).toLowerCase();
-  return [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".rs", ".go", ".java", ".cs", ".json", ".md", ".yml", ".yaml", ".toml", ".gradle", ".xml"].includes(ext)
-    || ["package.json", "requirements.txt", "pyproject.toml", "cargo.toml", "go.mod", "pom.xml", "build.gradle", "dockerfile"].includes(name);
+  return RELEVANT_EXTENSIONS.has(ext) || RELEVANT_FILE_NAMES.has(name);
 }
 
 export function isIgnoredPath(relativePath) {
@@ -412,16 +397,20 @@ export function extractRouteHints(content, ext, relativePath = "") {
 
 export function extractFileMetadata(filePath, content) {
   const ext = path.extname(filePath).toLowerCase();
+  const parsed = parseFile(content, { relativePath: filePath, ext, fileName: path.basename(filePath) });
   const testHints = [];
   const lines = content.split(/\r?\n/);
   for (let i = 0; i < lines.length; i += 1) {
     if (/\b(describe|it|test)\s*\(|^\s*def\s+test_/.test(lines[i])) testHints.push({ line: i + 1 });
   }
   return {
-    imports: extractImports(content, ext),
-    exports: extractExports(content, ext),
-    symbols: extractSymbols(content, ext),
-    routeHints: extractRouteHints(content, ext, filePath),
+    imports: parsed.imports.length ? parsed.imports : extractImports(content, ext),
+    exports: parsed.exports.length ? parsed.exports : extractExports(content, ext),
+    symbols: parsed.symbols.length ? parsed.symbols : extractSymbols(content, ext),
+    headings: parsed.headings,
+    dependencies: parsed.dependencies,
+    routes: parsed.routes,
+    routeHints: parsed.routes.length ? parsed.routes : extractRouteHints(content, ext, filePath),
     testHints: testHints.slice(0, 50)
   };
 }
@@ -445,9 +434,40 @@ function enrichFiles(files) {
   });
 }
 
+function recentChangedPaths(root) {
+  try {
+    const output = execFileSync("git", ["status", "--short"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (!output) return new Set();
+    return new Set(output.split(/\r?\n/).map((line) => line.slice(3).trim().replace(/^"|"$/g, "")).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+function scoreFile(file, recentPaths) {
+  let score = 0;
+  const reasons = [];
+  const display = toDisplayPath(file.relative);
+  const base = path.basename(file.relative).toLowerCase();
+  const add = (points, reason) => {
+    score += points;
+    reasons.push(reason);
+  };
+  if (/^(index|main|app|server)\.[^.]+$/i.test(base)) add(30, "entrypoint file");
+  if (/^(package|tsconfig)\.json$/i.test(base) || /^(vite|next)\.config\./i.test(base)) add(25, "package/config file");
+  if (/routes?|router|app\/api|(^|\/)pages(\/|$)/i.test(display)) add(20, "route file");
+  if (file.exports.length) add(15, "has exports");
+  if (file.symbols.length || file.headings.length) add(15, "has symbols");
+  if (file.imports.length) add(10, "has imports");
+  if (/(^|\/)(__tests__|tests?|spec)(\/|$)|(\.test|\.spec)\.[^.]+$/i.test(display)) add(10, "test file");
+  if (recentPaths.has(display) || recentPaths.has(file.relative)) add(10, "recently changed");
+  if (/(^|\/)(dist|build|out|coverage|generated)(\/|$)|(\.min\.)/i.test(display)) add(-20, "generated/build-like file");
+  return { importanceScore: score, importanceReasons: reasons };
+}
+
 function groupedFilesMd(files) {
   const groups = new Map();
-  for (const file of files.filter((item) => isRelevantFile(item.relative))) {
+  for (const file of files.filter((item) => isRelevantFile(item.relative)).sort((a, b) => b.importanceScore - a.importanceScore || a.relative.localeCompare(b.relative))) {
     const top = topLevelOf(file.relative);
     if (!groups.has(top)) groups.set(top, []);
     groups.get(top).push(file);
@@ -455,7 +475,7 @@ function groupedFilesMd(files) {
   const rows = ["# Files", ""];
   for (const [top, group] of [...groups.entries()].sort()) {
     rows.push(`## ${toDisplayPath(top)}`, "");
-    for (const file of group.slice(0, 80)) rows.push(`- ${toDisplayPath(file.relative)} (${file.language}, ${file.size} bytes)`);
+    for (const file of group.slice(0, 40)) rows.push(`- ${toDisplayPath(file.relative)} (${file.language}, score ${file.importanceScore})`);
     rows.push("");
   }
   return rows.join("\n").trimEnd() + "\n";
@@ -463,9 +483,10 @@ function groupedFilesMd(files) {
 
 function symbolsMd(files) {
   const rows = ["# Symbols", ""];
-  for (const file of files.filter((item) => item.symbols.length || item.exports.length).slice(0, 250)) {
+  for (const file of files.filter((item) => item.symbols.length || item.exports.length || item.headings.length).slice(0, 250)) {
     rows.push(`## ${toDisplayPath(file.relative)}`);
-    if (file.symbols.length) rows.push(`- Symbols: ${file.symbols.map((item) => `${item.name}:${item.line}`).join(", ")}`);
+    for (const item of file.symbols.slice(0, 30)) rows.push(`- ${item.type || "symbol"} ${item.name}`);
+    for (const item of file.headings.slice(0, 20)) rows.push(`- heading ${item.text}`);
     if (file.exports.length) rows.push(`- Exports: ${file.exports.join(", ")}`);
     rows.push("");
   }
@@ -474,18 +495,32 @@ function symbolsMd(files) {
 }
 
 function routeHintsMd(files) {
-  const rows = [];
+  const api = [];
+  const ui = [];
   for (const file of files) {
-    for (const hint of file.routeHints) rows.push(`- ${toDisplayPath(file.relative)}:${hint.line} ${hint.route}`);
+    for (const hint of file.routeHints) {
+      const routePath = hint.path || hint.route;
+      const row = `- ${hint.method ? `${hint.method} ` : ""}${routePath} - ${toDisplayPath(file.relative)}`;
+      if (hint.kind === "ui" || !hint.method) ui.push(row);
+      else api.push(row);
+    }
   }
-  return mdList("Routes", rows);
+  return `# Routes\n\n## API Routes\n\n${api.length ? api.join("\n") : "None found."}\n\n## UI Routes\n\n${ui.length ? ui.join("\n") : "None found."}\n`;
 }
 
 function collectDependencies(root, files) {
   const rows = ["# Dependencies", ""];
   const names = new Set(files.map((file) => path.basename(file.relative).toLowerCase()));
+  const parsedPackage = files.flatMap((file) => file.dependencies || []).find((item) => path.basename(item.file || "") === "package.json");
   const packageFile = path.join(root, "package.json");
-  if (names.has("package.json") && fileExists(packageFile)) {
+  if (parsedPackage) {
+    rows.push("## package.json", "");
+    if (parsedPackage.packageName) rows.push(`- name: ${parsedPackage.packageName}`);
+    if (parsedPackage.scripts.length) rows.push(`- scripts: ${parsedPackage.scripts.join(", ")}`);
+    if (parsedPackage.dependencies.length) rows.push(`- dependencies: ${parsedPackage.dependencies.join(", ")}`);
+    if (parsedPackage.devDependencies.length) rows.push(`- devDependencies: ${parsedPackage.devDependencies.join(", ")}`);
+    rows.push("");
+  } else if (names.has("package.json") && fileExists(packageFile)) {
     try {
       const pkg = JSON.parse(readText(packageFile));
       const scripts = Object.keys(pkg.scripts || {});
@@ -500,7 +535,7 @@ function collectDependencies(root, files) {
       rows.push("## package.json", "", "- Could not parse package.json", "");
     }
   }
-  for (const depFile of ["requirements.txt", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "build.gradle"]) {
+  for (const depFile of DEPENDENCY_FILES.filter((file) => file !== "package.json")) {
     if (names.has(depFile.toLowerCase())) rows.push(`- ${depFile}`);
   }
   if (rows.length === 2) rows.push("None found.");
@@ -509,7 +544,7 @@ function collectDependencies(root, files) {
 
 export function detectDependencies(root) {
   const found = [];
-  for (const name of ["package.json", "requirements.txt", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "build.gradle"]) {
+  for (const name of DEPENDENCY_FILES) {
     const file = path.join(root, name);
     if (!fileExists(file)) continue;
     if (name === "package.json") {
@@ -586,6 +621,28 @@ function gitStatus(root) {
   }
 }
 
+function contextDirFor(root) {
+  return path.join(root, ".codex", "context");
+}
+
+function indexPathFor(root) {
+  return path.join(contextDirFor(root), "index.json");
+}
+
+function relevantPathFor(root) {
+  return path.join(contextDirFor(root), RELEVANT_CONTEXT_FILE);
+}
+
+function readIndex(root) {
+  const file = indexPathFor(root);
+  if (!fileExists(file)) throw new Error("Context index not found. Run `codex-context-init index` first.");
+  try {
+    return JSON.parse(readText(file));
+  } catch {
+    throw new Error("Context index not found. Run `codex-context-init index` first.");
+  }
+}
+
 export function generateSummary(index) {
   const files = index._files || [];
   const languageRows = Object.entries(index.languageCounts || {}).slice(0, 8).map(([language, count]) => `- ${language}: ${count}`);
@@ -593,7 +650,8 @@ export function generateSummary(index) {
   const tests = testCandidates(files);
   const scripts = buildRunScripts(index._root);
   const dirs = importantDirs(files);
-  return `# Context Summary\n\n- Root: ${index.root}\n- Likely project type: ${likelyProjectType(files)}\n- Files indexed: ${index.fileCount}\n- Ignored entries: ${index.counts.ignored}\n- Skipped large files: ${index.counts.skippedLarge}\n\n## Primary Languages\n\n${languageRows.length ? languageRows.join("\n") : "None found."}\n\n## Important Directories\n\n${dirs.length ? dirs.map((dir) => `- ${dir}`).join("\n") : "None found."}\n\n## Entrypoint Candidates\n\n${entries.length ? entries.map((entry) => `- ${entry}`).join("\n") : "None found."}\n\n## Test Candidates\n\n${tests.length ? tests.map((test) => `- ${test}`).join("\n") : "None found."}\n\n## Build / Run Script Candidates\n\n${scripts.length ? scripts.map((script) => `- ${script}`).join("\n") : "None found."}\n`;
+  const topImportant = [...files].sort((a, b) => b.importanceScore - a.importanceScore || a.relative.localeCompare(b.relative)).slice(0, 10).map((file) => `- ${toDisplayPath(file.relative)} (${file.importanceScore})`);
+  return `# Context Summary\n\n- Root: ${index.root}\n- Likely project type: ${likelyProjectType(files)}\n- Files indexed: ${index.fileCount}\n- Route count: ${index.routeCount}\n- Symbol count: ${index.symbolCount}\n- Dependency file count: ${index.dependencyFileCount}\n- Recent changed files count: ${index.recentChangesCount}\n\n## Primary Languages\n\n${languageRows.length ? languageRows.join("\n") : "None found."}\n\n## Important Directories\n\n${dirs.length ? dirs.map((dir) => `- ${dir}`).join("\n") : "None found."}\n\n## Top Important Files\n\n${topImportant.length ? topImportant.join("\n") : "None found."}\n\n## Entrypoint Candidates\n\n${entries.length ? entries.map((entry) => `- ${entry}`).join("\n") : "None found."}\n\n## Test Candidates\n\n${tests.length ? tests.map((test) => `- ${test}`).join("\n") : "None found."}\n\n## Build / Run Script Candidates\n\n${scripts.length ? scripts.map((script) => `- ${script}`).join("\n") : "None found."}\n`;
 }
 
 export function writeContextArtifacts(root, index) {
@@ -601,10 +659,16 @@ export function writeContextArtifacts(root, index) {
   const files = index._files || [];
   const artifacts = {
     "index.json": JSON.stringify({
+      schemaVersion: index.schemaVersion,
       generatedAt: index.generatedAt,
+      generatorVersion: index.generatorVersion,
       root: index.root,
       fileCount: index.fileCount,
       languageCounts: index.languageCounts,
+      symbolCount: index.symbolCount,
+      routeCount: index.routeCount,
+      dependencyFileCount: index.dependencyFileCount,
+      recentChangesCount: index.recentChangesCount,
       maxFileSizeKb: index.maxFileSizeKb,
       counts: index.counts,
       files: index.files
@@ -624,14 +688,25 @@ export function writeContextArtifacts(root, index) {
 }
 
 export function runIndex(root = process.cwd(), options = {}) {
+  const started = Date.now();
   const scan = scanProject(root, options);
-  const files = enrichFiles(scan.files.sort((a, b) => a.relative.localeCompare(b.relative)));
+  const recentPaths = recentChangedPaths(root);
+  const files = enrichFiles(scan.files.sort((a, b) => a.relative.localeCompare(b.relative))).map((file) => ({ ...file, ...scoreFile(file, recentPaths) }));
   const languageCounts = Object.fromEntries(topLanguages(files));
+  const symbolCount = files.reduce((sum, file) => sum + file.symbols.length + file.headings.length, 0);
+  const routeCount = files.reduce((sum, file) => sum + file.routeHints.length, 0);
+  const dependencyFileCount = detectDependencies(root).length;
   const index = {
+    schemaVersion: SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
+    generatorVersion: GENERATOR_VERSION,
     root: path.basename(root),
     fileCount: files.length,
     languageCounts,
+    symbolCount,
+    routeCount,
+    dependencyFileCount,
+    recentChangesCount: recentPaths.size,
     maxFileSizeKb: scan.maxFileSizeKb,
     counts: { files: files.length, ignored: scan.ignored, skippedLarge: scan.skippedLarge },
     files: files.map((file) => ({
@@ -642,15 +717,32 @@ export function runIndex(root = process.cwd(), options = {}) {
         imports: file.imports,
         exports: file.exports,
         symbols: file.symbols,
+        routes: file.routeHints,
         routeHints: file.routeHints,
-        testHints: file.testHints
+        headings: file.headings,
+        testHints: file.testHints,
+        importanceScore: file.importanceScore,
+        importanceReasons: file.importanceReasons
       })),
     _files: files,
     _root: root
   };
   const artifactResult = writeContextArtifacts(root, index);
   const upgrade = runProjectUpgrade(root);
-  return { root, filesIndexed: files.length, ignored: scan.ignored, skippedLarge: scan.skippedLarge, artifacts: artifactResult.artifacts, written: artifactResult.written, upgrade };
+  return {
+    ok: true,
+    action: "index",
+    root,
+    filesIndexed: files.length,
+    skippedFiles: scan.skippedLarge + scan.ignored,
+    ignored: scan.ignored,
+    skippedLarge: scan.skippedLarge,
+    artifacts: artifactResult.artifacts,
+    written: artifactResult.written,
+    durationMs: Date.now() - started,
+    warnings: [],
+    upgrade
+  };
 }
 
 export function runContextIndex(root = process.cwd(), options = {}) {
@@ -664,6 +756,7 @@ export function runContextDoctor(root = process.cwd()) {
   });
   const indexPath = path.join(root, ".codex", "context", "index.json");
   let indexValid = false;
+  let schemaVersion = "unavailable";
   let generatedAt = "unavailable";
   let fileCount = "unavailable";
   let noSecretsIndexed = false;
@@ -671,6 +764,7 @@ export function runContextDoctor(root = process.cwd()) {
     try {
       const index = JSON.parse(readText(indexPath));
       indexValid = Boolean(index && Array.isArray(index.files));
+      schemaVersion = index.schemaVersion ? String(index.schemaVersion) : "unavailable";
       const parsedDate = Date.parse(index.generatedAt);
       generatedAt = Number.isNaN(parsedDate) ? "invalid generatedAt" : index.generatedAt;
       const matchesLength = Number.isInteger(index.fileCount) && index.fileCount === index.files.length;
@@ -683,9 +777,12 @@ export function runContextDoctor(root = process.cwd()) {
   }
   const agentsPath = path.join(root, ".codex", "AGENTS.md");
   const agentsReferencesContext = fileExists(agentsPath) && readText(agentsPath).includes("Precomputed Context Engine");
+  const relevantPath = relevantPathFor(root);
+  const relevantReadable = !fileExists(relevantPath) || fs.statSync(relevantPath).isFile();
   const results = [
     ...artifactResults,
     { file: "index.json", found: indexValid, line: `${indexValid ? "OK" : "MISSING"} index.json valid` },
+    { file: "schemaVersion", found: schemaVersion !== "unavailable", line: `${schemaVersion !== "unavailable" ? "OK" : "MISSING"} schemaVersion ${schemaVersion}` },
     { file: "fileCount", found: /^\d+$/.test(fileCount), line: `${/^\d+$/.test(fileCount) ? "OK" : "MISSING"} file count ${fileCount}` },
     { file: "generatedAt", found: !generatedAt.startsWith("invalid") && generatedAt !== "unavailable", line: `${!generatedAt.startsWith("invalid") && generatedAt !== "unavailable" ? "OK" : "MISSING"} generatedAt ${generatedAt}` },
     { file: "secrets", found: noSecretsIndexed, line: `${noSecretsIndexed ? "OK" : "MISSING"} no secret files indexed` },
@@ -693,14 +790,92 @@ export function runContextDoctor(root = process.cwd()) {
       file: path.join(".codex", "AGENTS.md"),
       found: agentsReferencesContext,
       line: `${agentsReferencesContext ? "OK" : "MISSING"} .codex/AGENTS.md references context engine`
+    },
+    {
+      file: path.join(".codex", "context", RELEVANT_CONTEXT_FILE),
+      found: relevantReadable,
+      line: `${fileExists(relevantPath) ? "OK" : "INFO"} .codex/context/relevant.md ${fileExists(relevantPath) ? "readable" : "missing optional"}`
     }
   ];
   return { ok: results.every((result) => result.found), results };
 }
 
 export function runContextClean(root = process.cwd()) {
+  const started = Date.now();
   const dir = path.join(root, ".codex", "context");
-  if (!fileExists(dir)) return { removed: false, dir };
+  if (!fileExists(dir)) return { ok: true, action: "context-clean", removed: false, dir, durationMs: Date.now() - started, warnings: [] };
   fs.rmSync(dir, { recursive: true, force: true });
-  return { removed: true, dir };
+  return { ok: true, action: "context-clean", removed: true, dir, durationMs: Date.now() - started, warnings: [] };
+}
+
+function detectedContext(file) {
+  const rows = [];
+  if (file.exports?.length) rows.push(`- exports: ${file.exports.slice(0, 8).join(", ")}`);
+  if (file.symbols?.length) rows.push(`- symbols: ${file.symbols.slice(0, 8).map((item) => item.name).join(", ")}`);
+  if (file.routes?.length) rows.push(`- routes: ${file.routes.slice(0, 8).map((item) => `${item.method ? `${item.method} ` : ""}${item.path || item.route}`).join(", ")}`);
+  if (file.headings?.length) rows.push(`- headings: ${file.headings.slice(0, 8).map((item) => item.text).join(", ")}`);
+  return rows.length ? rows.join("\n") : "- none";
+}
+
+function relevantMarkdown(question, matches, byPath) {
+  const lines = ["# Relevant Context", "", `Query: ${question}`, "", `Generated: ${new Date().toISOString()}`, "", "## Top Matches", ""];
+  matches.forEach((match, index) => {
+    const file = byPath.get(match.path) || {};
+    lines.push(`### ${index + 1}. ${match.path}`, `Score: ${match.score}`, "", "Reasons:");
+    for (const reason of match.reasons.slice(0, 8)) lines.push(`- ${reason}`);
+    lines.push("", "Detected context:", detectedContext(file), "");
+  });
+  lines.push("## Suggested Codex Usage", "", "Before editing, inspect only the top relevant files first.", "If these files are insufficient, then perform a targeted search.", "", "## Notes", "", "Generated by codex-context-init query.", "Source code remains the source of truth.", "");
+  return lines.join("\n");
+}
+
+export function runQuery(root = process.cwd(), question, options = {}) {
+  const started = Date.now();
+  if (!question || !question.trim()) throw new Error("Query question is required.");
+  const topCount = Number.parseInt(options.top ?? 10, 10) || 10;
+  const index = readIndex(root);
+  const terms = queryTerms(question);
+  const recentPaths = new Set((index.files || [])
+    .filter((file) => (file.importanceReasons || []).includes("recently changed"))
+    .map((file) => file.path));
+  const byPath = new Map((index.files || []).map((file) => [file.path, file]));
+  const matches = (index.files || [])
+    .map((file) => scoreFileForQuery(file, terms, recentPaths))
+    .filter((match) => match.score > 0)
+    .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+    .slice(0, topCount);
+  const relevantPath = relevantPathFor(root);
+  writeFileAtomic(relevantPath, relevantMarkdown(question, matches, byPath));
+  return {
+    ok: true,
+    action: "query",
+    question,
+    topCount,
+    relevantPath: path.join(".codex", "context", RELEVANT_CONTEXT_FILE),
+    matches,
+    durationMs: Date.now() - started,
+    warnings: []
+  };
+}
+
+export function runDebug(root = process.cwd()) {
+  const globalAgentsPath = getGlobalAgentsPath();
+  const projectAgentsPath = path.join(root, ".codex", "AGENTS.md");
+  const contextDoctor = runContextDoctor(root);
+  const projectDoctor = runProjectDoctor(root);
+  const relevantPath = relevantPathFor(root);
+  const relevantExists = fileExists(relevantPath);
+  const results = [
+    { line: `OS ${os.platform()} ${os.release()}`, found: true },
+    { line: `Node ${process.version}`, found: true },
+    { line: "CLI version 0.1.0", found: true },
+    { line: `${fileExists(globalAgentsPath) ? "OK" : "MISSING"} global AGENTS ${globalAgentsPath}`, found: fileExists(globalAgentsPath) },
+    { line: `${fileExists(projectAgentsPath) ? "OK" : "MISSING"} project AGENTS ${projectAgentsPath}`, found: fileExists(projectAgentsPath) },
+    { line: `${contextDoctor.ok ? "OK" : "MISSING"} context status`, found: contextDoctor.ok },
+    { line: `${relevantExists ? "OK" : "MISSING"} relevant.md ${relevantExists ? "present" : "missing"}`, found: true },
+    { line: `relevant.md modified ${relevantExists ? fs.statSync(relevantPath).mtime.toISOString() : "n/a"}`, found: true },
+    { line: `Log location ${path.join(root, ".codex", "logs", "latest.log")}`, found: true }
+  ];
+  const ok = results.every((result) => result.found) && projectDoctor.ok;
+  return { ok, action: "debug", root, results, durationMs: 0, warnings: [] };
 }

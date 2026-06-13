@@ -1,0 +1,19 @@
+2026-06-13T22:15:48.292Z [INFO] MISSING .codex\AGENTS.md missing
+2026-06-13T22:15:48.293Z [INFO] MISSING .codex\templates\project_context.template.md missing
+2026-06-13T22:15:48.294Z [INFO] MISSING .codex\templates\architecture.template.md missing
+2026-06-13T22:15:48.294Z [INFO] MISSING .codex\templates\task.template.md missing
+2026-06-13T22:15:48.295Z [INFO] MISSING .codex\templates\decision_log.template.md missing
+2026-06-13T22:15:48.295Z [INFO] MISSING project_context.md missing
+2026-06-13T22:15:48.296Z [INFO] MISSING architecture.md missing
+2026-06-13T22:15:48.296Z [INFO] MISSING task.md missing
+2026-06-13T22:15:48.296Z [INFO] MISSING decision_log.md missing
+2026-06-13T22:15:55.004Z [INFO] Usage:
+  codex-context-init new <project-name> [--force]
+  codex-context-init global [doctor]
+  codex-context-init project <upgrade|doctor>
+  codex-context-init index [--watch]
+  codex-context-init context <doctor|clean>
+  codex-context-init sync
+  codex-context-init doctor
+  codex-context-init debug
+  codex-context-init upgrade

@@ -7,6 +7,7 @@ import {
   isIgnoredWorkspacePath,
   runContextClean,
   runContextDoctor,
+  runDebug,
   runContextIndex,
   runDoctor,
   runGlobalDoctor,
@@ -14,6 +15,7 @@ import {
   runNew,
   runProjectDoctor,
   runProjectUpgrade,
+  runQuery,
   runSync,
   runUpgrade
 } from "../src/core.js";
@@ -33,8 +35,10 @@ function usage(code = 0) {
   codex-context-init project <upgrade|doctor>
   codex-context-init index [--watch]
   codex-context-init context <doctor|clean>
+  codex-context-init query "<question>" [--top 10]
   codex-context-init sync
   codex-context-init doctor
+  codex-context-init debug
   codex-context-init upgrade`);
   process.exit(code);
 }
@@ -115,6 +119,14 @@ try {
       usage(1);
       break;
     }
+    case "query": {
+      const topIndex = rest.indexOf("--top");
+      const top = topIndex >= 0 ? rest[topIndex + 1] : undefined;
+      const result = runQuery(process.cwd(), subcommand, { top });
+      logger.info(`Wrote ${result.relevantPath}`);
+      for (const match of result.matches) logger.info(`${match.score} ${match.path}`);
+      break;
+    }
     case "sync": {
       const result = runSync();
       logger.info(`Created ${result.created} missing file(s)`);
@@ -122,6 +134,12 @@ try {
     }
     case "doctor": {
       const result = runDoctor();
+      for (const item of result.results) logger.info(item.line);
+      process.exit(result.ok ? 0 : 1);
+      break;
+    }
+    case "debug": {
+      const result = runDebug();
       for (const item of result.results) logger.info(item.line);
       process.exit(result.ok ? 0 : 1);
       break;

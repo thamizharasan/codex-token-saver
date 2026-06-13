@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "Initialize and maintain Codex context-compression files.",
   "type": "module",
+  "displayName": "Codex Token Saver",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thamizharasan/codex-token-saver.git"
+  },
   "main": "./src/extension/extension.cjs",
   "bin": {
     "codex-context-init": "./bin/codex-context-init.js"
@@ -50,6 +55,10 @@
       {
         "command": "codexContext.contextDoctor",
         "title": "Codex Context: Doctor Context Artifacts"
+      },
+      {
+        "command": "codexContext.queryRelevant",
+        "title": "Codex Context: Query Relevant Files"
       }
     ],
     "configuration": {

@@ -25,22 +25,20 @@ function maxFileSizeKb() {
   return vscode.workspace.getConfiguration("codexContext").get("maxFileSizeKb", 300);
 }
 
-function outputLogger(output) {
-  return {
-    info(message) {
-      output.appendLine(message);
-    },
-    error(error) {
-      output.appendLine(error instanceof Error ? error.message : String(error));
-    }
-  };
-}
-
 async function handleCommand(output, action) {
   try {
-    await action(await loadCore(), outputLogger(output));
+    const core = await loadCore();
+    const logger = core.createLogger({
+      root: workspaceRoot() ?? process.cwd(),
+      sink: {
+        log: (message) => output.appendLine(message),
+        warn: (message) => output.appendLine(message),
+        error: (message) => output.appendLine(message)
+      }
+    });
+    await action(core, logger);
   } catch (error) {
-    outputLogger(output).error(error);
+    output.appendLine(error instanceof Error ? error.message : String(error));
     vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
   }
 }
@@ -110,6 +108,19 @@ function activate(context) {
       output.appendLine("");
       for (const item of result.results) output.appendLine(item.line);
       output.show();
+    })),
+    vscode.commands.registerCommand("codexContext.queryRelevant", () => handleCommand(output, async (core) => {
+      const question = await vscode.window.showInputBox({ prompt: "What are you trying to change or understand?" });
+      if (!question) return;
+      const result = core.runQuery(requireWorkspace(), question);
+      output.clear();
+      output.appendLine("Codex Context Query");
+      output.appendLine("");
+      output.appendLine(`Query: ${result.question}`);
+      output.appendLine("");
+      for (const match of result.matches) output.appendLine(`${match.score} ${match.path}`);
+      output.show();
+      vscode.window.showInformationMessage("Codex Context: relevant context written");
     }))
   );
 

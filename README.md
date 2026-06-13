@@ -69,6 +69,7 @@ flowchart LR
 - Recent git changes
 - Context doctor
 - Context clean
+- Context query
 - CLI + VS Code extension
 - Local-only indexing
 - Cross-platform support: Windows, macOS, Linux
@@ -156,8 +157,8 @@ Codex Context: Doctor Context Artifacts
 | `codex-context-init index --watch` | Watches files and re-indexes after changes. | Active development. | Same as `index`. | `codex-context-init index --watch` |
 | `codex-context-init context doctor` | Validates context artifacts, `index.json`, file count, timestamp, AGENTS reference, and secret exclusions. | Debug generated context. | No. | `codex-context-init context doctor` |
 | `codex-context-init context clean` | Deletes only `.codex/context`. | Rebuild context from scratch. | Deletes generated context directory only. | `codex-context-init context clean` |
-
-`codex-context-init debug` is not currently implemented.
+| `codex-context-init query "<question>" [--top 10]` | Uses the generated index to write `.codex/context/relevant.md` with the most relevant files. | Before a focused Codex task. | Writes generated `relevant.md` only. | `codex-context-init query "what files handle authentication?"` |
+| `codex-context-init debug` | Prints OS, Node, CLI, AGENTS, context, and log diagnostics. | Debug local setup. | No. | `codex-context-init debug` |
 
 ## Generated Files
 
@@ -229,4 +230,4 @@ codex-context-init context clean
 codex-context-init index
 ```
 
-`codex-context-init debug` is not currently available. Use `--verbose` with CLI commands for stack traces when debugging command failures.
+Use `codex-context-init debug` for local diagnostics. Use `--verbose` with CLI commands for stack traces when debugging command failures.
