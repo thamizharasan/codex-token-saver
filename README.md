@@ -69,9 +69,9 @@ flowchart LR
 - Context indexing
 - Deterministic importance scoring
 - File inventory
-- Symbol extraction
+- Symbol extraction for JavaScript, TypeScript, Python, and Markdown
 - Dependency summary
-- Route hints
+- Route hints for Express-style handlers, React Router-style usage, FastAPI/Flask decorators, and Next.js-style file routes
 - Recent git changes
 - Context doctor
 - Context clean
@@ -195,6 +195,18 @@ Each file entry can include:
 
 The generated Markdown artifacts stay compact and are intended to guide Codex toward the smallest useful source file set.
 
+Current parser coverage:
+
+| File type | Extracted context |
+| --- | --- |
+| JavaScript / TypeScript | imports, require calls, exports, function declarations, arrow functions, classes, exported constants, Express-style routes, React Router-style paths |
+| Python | imports, `from` imports, functions, classes, FastAPI and Flask route decorators |
+| Markdown | headings |
+| `package.json` | scripts, dependency names, dev dependency names |
+| Other indexed files | file metadata, hash, language, path, size, and importance score |
+
+The parser is intentionally simple and safe for Phase 2. It is designed to produce compact navigation context, not a complete semantic model of the codebase.
+
 ## Phase 3: Context Query
 
 After indexing, `codex-context-init query` reads only the existing `.codex/context/index.json`, applies deterministic scoring, and writes `.codex/context/relevant.md`.
@@ -286,9 +298,10 @@ Rough estimates, not guaranteed benchmarks:
 
 ## Limitations
 
-- Heuristic parser.
+- Heuristic parser. It uses simple deterministic extraction rather than a full AST parser.
+- It can miss complex imports, dynamic routes, generated code patterns, or symbols split across unusual formatting.
 - Not a vector database.
-- No embeddings in v1.
+- No embeddings.
 - Not direct runtime injection into Codex.
 - Source code remains source of truth.
 - Generated context can become stale unless re-indexed.

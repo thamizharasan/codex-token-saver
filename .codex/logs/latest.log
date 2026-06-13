@@ -59,3 +59,12 @@
   codex-context-init doctor
   codex-context-init debug
   codex-context-init upgrade
+2026-06-13T23:22:01.428Z [INFO] MISSING .codex\AGENTS.md missing
+2026-06-13T23:22:01.430Z [INFO] MISSING .codex\templates\project_context.template.md missing
+2026-06-13T23:22:01.430Z [INFO] MISSING .codex\templates\architecture.template.md missing
+2026-06-13T23:22:01.431Z [INFO] MISSING .codex\templates\task.template.md missing
+2026-06-13T23:22:01.431Z [INFO] MISSING .codex\templates\decision_log.template.md missing
+2026-06-13T23:22:01.432Z [INFO] MISSING project_context.md missing
+2026-06-13T23:22:01.432Z [INFO] MISSING architecture.md missing
+2026-06-13T23:22:01.432Z [INFO] MISSING task.md missing
+2026-06-13T23:22:01.433Z [INFO] MISSING decision_log.md missing
